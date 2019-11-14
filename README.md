@@ -1,5 +1,5 @@
 # Firmware for M5StickC which allows bluetooth connection to xdrip for iOS
-##### M5Stack Nightscout monitor<br/>Copyright (C) Johan Degraeve 
+##### M5Stick c xdrip monitor<br/>Copyright (C) Johan Degraeve 
 
 This is a modified version of https://github.com/JohanDegraeve/M5_NightscoutMon
 
