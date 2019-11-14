@@ -433,7 +433,7 @@ void updateGlycemia() {
         if (strcmp(sensSgvStr, "---") != 0) {
           if(ns.arrowAngle!=180) {
              if (M5.Lcd.width() <= 160) {
-                drawArrow(M5.Lcd.width() - 40, 40, 10, ns.arrowAngle+85, 30, 30, textColor);//(int x, int y, int asize, int aangle, int pwidth, int plength, uint16_t color){
+                //drawArrow(M5.Lcd.width() - 40, 40, 10, ns.arrowAngle+85, 30, 30, textColor);//(int x, int y, int asize, int aangle, int pwidth, int plength, uint16_t color){
              } else {
                 drawArrow( M5.Lcd.width() - 40, ay, 10, ns.arrowAngle+85, 28, 28, textColor);
              }
