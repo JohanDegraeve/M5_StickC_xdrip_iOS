@@ -8,13 +8,13 @@ This is a modified version of https://github.com/JohanDegraeve/M5_NightscoutMon
 There's only one screen, with the bloodglucose value and an arrow. Always the same color. A bluetooth connection can be made with an iOS device that has xdrip installed : https://github.com/JohanDegraeve/xdripswift. The iOS device can send readings directly to the M5Stick
 
 With xdrip one can
- * Scan for and connect to multiple M5Stacks.
+ * Scan for and connect to multiple M5Stacks and/or M5Sticks
  * configure the text color
  * configure the background color
  * rotate the screen
- * configure (optional) a password ==> if a password is set in the M5Stack, then the same password must be configured in the xdrip app - this is not strictly necessary, see further on
+ * configure (optional) a password ==> if a password is set in the M5Stickc, then the same password must be configured in the xdrip app - this is not strictly necessary, see further on
  * the selected bloodglucose unit (mgdl or mmol) will also be sent to the M5Stack
- * Send readings : the M5Stack can receive readings from xdrip.
+ * Send readings : the M5Stickc receives readings from xdrip for iOS
 
 ### To compile
 
@@ -22,14 +22,14 @@ To compile, in Arduino IDE set Tools - Partition Scheme - No OTA (Large APP). Th
 
 ### Installaton and Support
 
-Download latest M5Burner release : https://github.com/JohanDegraeve/M5_NightscoutMon/releases
-It is Windows executable with binary M5Stack firmware included. Just unzip it, start the M5Burner.exe, choose COM port where your M5Stack is connected and burn the firmware.
+Download latest M5Burner release : https://github.com/JohanDegraeve/M5_StickC_xdrip_iOS/releases
+It is Windows executable with binary M5Stickc firmware included. Just unzip it, start the M5Burner.exe, choose COM port where your M5Stack is connected and burn the firmware.
 
 More info ? send an email to xdrip@proximus.be
 
 ### microSD card
 
-The M5Stack can work without microSD card and without the M5NS.INI file. If the file is missing, then whenever the M5Stack restarts, xdrip will need to be connected to configure the required parameters
+The M5Stickc can work without microSD card and without the M5NS.INI file. If the file is missing, then whenever the M5Stack restarts, xdrip will need to be connected to configure the required parameters
 
 ### authentication - passwords
 
