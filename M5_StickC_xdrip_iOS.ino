@@ -33,6 +33,9 @@
 
 #include <M5StickC.h>
 #include <Preferences.h>
+#include <WiFi.h>
+#include <WiFiMulti.h>
+#include <HTTPClient.h>
 #include "time.h"
 // #include <util/eu_dst.h>
 #define ARDUINOJSON_USE_LONG_LONG 1
@@ -53,6 +56,8 @@
 // if debugLogging then there's more logging, haha
 const bool debugLogging = true;
 
+extern const unsigned char wifi2_icon16x16[];
+
 Preferences preferences;
 tConfig cfg;
 
@@ -72,6 +77,7 @@ int icon_ypos[1] = {0};
   #define min(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
+WiFiMulti WiFiMulti;
 unsigned long msCount;
 unsigned long msStart;
 static uint8_t lcdBrightness = 10;
@@ -84,6 +90,8 @@ static uint16_t backGroundColor = TFT_BLACK;
 
 // rotation to use
 static uint8_t rotation = 1;// 1 = horizontal, normal; 2 = 90 clockwise, 3 = upside down, 4 = 270 clockwise or 90 anti-clockwise
+
+bool connectToWiFi = true;
 
 // milliseconds since start of last call to connectToWiFiIfNightScoutUrlExists from within nightscout check
 unsigned long milliSecondsSinceLastCallToWifiConnectFromWithinNightScoutcheck = 0;
@@ -214,6 +222,12 @@ unsigned long getLocalTimeInSeconds() {
     if (debugLogging) {Serial.println("getLocalTime is false");}
   }
 
+  /// try setting up ntp , this will only work if wifi is on, after that, no matter if succeeded or not we will continue trying to get time from ble client
+  /// using ntp
+  if((WiFiMulti.run() == WL_CONNECTED)) {
+    if (debugLogging) {Serial.println("calling configtime");}
+    configTime(cfg.timeZone, cfg.dst, ntpServer, "time.nist.gov", "time.google.com");
+  }
 
   return 0;  
 }
@@ -247,6 +261,56 @@ void drawIcon(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t color) {
       }
     }
   }
+}
+
+void connectToWiFiIfNightScoutUrlExists() {
+
+  // check if nightscouturl exists, otherwise don't even try to connect
+  if ( sizeOfStringInCharArray(cfg.url, 64) == 0) {
+    return;
+  }
+
+  if (!connectToWiFi) {
+    Serial.println(F("connectToWiFi = false, will not try to connect to Wifi"));
+    return;
+  }
+
+  if((WiFiMulti.run() == WL_CONNECTED)) {
+    return;
+  }
+  
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
+
+  Serial.println(F("WiFi connect start"));
+
+  // We start by connecting to a WiFi network
+  for(int i=0; i<=9; i++) {
+    if((cfg.wlanssid[i][0]!=0) && (cfg.wlanpass[i][0]!=0)) {
+      if (debugLogging) {
+        Serial.print(F("Adding access point "));Serial.print(cfg.wlanssid[i]);Serial.print(F(" with password "));Serial.println(cfg.wlanpass[i]);
+      }
+      WiFiMulti.addAP(cfg.wlanssid[i], cfg.wlanpass[i]);
+    }
+  }
+
+  
+  Serial.println(F("Wait for WiFi... "));
+
+  if (WiFiMulti.run() != WL_CONNECTED) {
+      Serial.println(F("Wifi not connected"));
+      yield();
+      return;
+  }
+
+  Serial.println(F(""));
+  Serial.println(F("WiFi connected to SSID ")); Serial.println(WiFi.SSID());
+
+  Serial.println(F(""));
+
+  Serial.println(F("Connection done"));
+
 }
 
 // the setup routine runs once when M5Stack starts up
@@ -305,6 +369,10 @@ void setup() {
           delay(1000);
           M5.Lcd.fillScreen(backGroundColor);
       
+ 
+          connectToWiFiIfNightScoutUrlExists();
+          yield();// seems to be to let the board to things in the background, probably related to calling connectToWiFiIfNightScoutUrlExists
+      
       
           setPageIconPos();
           
@@ -325,6 +393,116 @@ void setup() {
     }
 }
 
+int readNightscout() {
+
+  int err=0;
+    
+  if((WiFiMulti.run() == WL_CONNECTED)) {
+
+    Serial.println(F("In readNightscout"));
+
+    HTTPClient http;
+    char tmpstr[32];/// DELETE THIS OR CHECK FIRST IF DETAILED DEBUGGING IS ENABLED WITH EXTRA FLAG, TO AVOID THAT THIS GETS ALLOCATED EACH TIME AGAIN AND AGAIN
+
+    M5.Lcd.fillRect(icon_xpos[0], icon_ypos[0], 16, 16, backGroundColor);
+    drawIcon(icon_xpos[0], icon_ypos[0], (uint8_t*)wifi2_icon16x16,  TFT_BLUE);
+    
+    Serial.print(F("JSON query NSurl = \'"));Serial.print(NSurl);Serial.print(F("\'\n"));
+    http.begin(NSurl); //HTTP
+    
+    Serial.print(F("[HTTP] GET...\n"));
+    // start connection and send HTTP header
+    int httpCode = http.GET();
+  
+    // httpCode will be negative on error
+    if(httpCode > 0) {
+      // HTTP header has been send and Server response header has been handled
+      Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+
+      // file found at server
+      if(httpCode == HTTP_CODE_OK) {
+        String json = http.getString();
+
+        Serial.print(F("Free Heap = ")); Serial.println(ESP.getFreeHeap());
+        
+        auto JSONerr = deserializeJson(JSONdoc, json);
+        Serial.println(F("JSON deserialized OK"));
+        JsonArray arr=JSONdoc.as<JsonArray>();
+        Serial.print(F("JSON array size = ")); Serial.println(arr.size());
+        if (JSONerr || arr.size()==0) {   //Check for errors in parsing
+          if(JSONerr) {
+            err=1001; // "JSON parsing failed"
+          } else {
+            err=1002; // "No data from Nightscout"
+          }
+
+        } else {
+          JsonObject obj; 
+          int sgvindex = 0;
+          do {
+            obj=JSONdoc[sgvindex].as<JsonObject>();
+            sgvindex++;
+          } while ((!obj.containsKey(F("sgv"))) && (sgvindex<(arr.size()-1)));
+          sgvindex--;
+          if(sgvindex<0 || sgvindex>(arr.size()-1))
+            sgvindex=0;
+
+          ns.rawtime = JSONdoc[sgvindex][F("date")].as<long long>(); // sensTime is time in milliseconds since 1970, something like 1555229938118
+          strlcpy(ns.sensDir, JSONdoc[sgvindex][F("direction")] | "N/A", 32);
+          
+          ns.sensSgv = JSONdoc[sgvindex][F("sgv")]; // get value of sensor measurement
+          ns.sensTime = ns.rawtime / 1000; // no milliseconds, since 2000 would be - 946684800, but ok
+          timeStampLatestBgReadingInSecondsUTC = ns.sensTime;   
+
+          ns.sensSgvMgDl = ns.sensSgv;
+          // internally we work in mmol/L
+          ns.sensSgv/=18.0;
+          
+          localtime_r(&ns.sensTime, &ns.sensTm);
+          
+          setNsArrowAngle();                                          
+
+          // screen should be updated
+          updateGlycemia();
+          
+          Serial.print(F("sensTime = "));
+          Serial.print(ns.sensTime);
+          sprintf(tmpstr, " (JSON %lld)", (long long) ns.rawtime);
+          Serial.print(tmpstr);
+          sprintf(tmpstr, " = %s", ctime(&ns.sensTime));
+          Serial.print(tmpstr);
+          Serial.print(F("sensSgv = "));
+          Serial.println(ns.sensSgv);
+          Serial.print(F("sensDir = "));
+          Serial.println(ns.sensDir);
+          // Serial.print(ns.sensTm.tm_year+1900); Serial.print(F(" / ")); Serial.print(ns.sensTm.tm_mon+1); Serial.print(F(" / ")); Serial.println(ns.sensTm.tm_mday);
+          Serial.print(F("Sensor time: ")); Serial.print(ns.sensTm.tm_hour); Serial.print(F(":")); Serial.print(ns.sensTm.tm_min); Serial.print(F(":")); Serial.print(ns.sensTm.tm_sec); Serial.print(F(" DST ")); Serial.println(ns.sensTm.tm_isdst);
+        } 
+      } else {
+        err=httpCode;
+      }
+    } else {
+      Serial.print(F("httpCode = "));Serial.print(httpCode);Serial.print(F(", errorToString = "));Serial.println(http.errorToString(httpCode));
+      err=httpCode;
+    }
+    http.end();
+
+    if(err!=0)
+      return err;
+      
+  } else {
+    if (millis() - milliSecondsSinceLastCallToWifiConnectFromWithinNightScoutcheck > minimumTimeBetweenTwoCallsToWifiConnectFromWithinNightScoutcheck) {
+      connectToWiFiIfNightScoutUrlExists();
+      yield();
+      milliSecondsSinceLastCallToWifiConnectFromWithinNightScoutcheck = millis();
+    }
+    
+  }
+
+  M5.Lcd.fillRect(icon_xpos[0], icon_ypos[0], 16, 16, backGroundColor);
+
+  return err;
+}
 
 void updateGlycemia() {
   char tmpstr[255];// MAKE GLOBAL AND AVOID RECREATION each TIME ???
@@ -463,6 +641,7 @@ void loop(){
   // if readNightScout results in a new reading, then this will also call updateGlyecemia
   if((millis()-msCount>120000L) || ((millis()-msCount>5000) && utcTimeInSeconds == 0L)  || ((millis()-msCount>15000L) && utcTimeInSeconds > 0L && (utcTimeInSeconds-timeStampLatestBgReadingInSecondsUTC>120L))) {
     updateGlycemia();
+    readNightscout();
     msCount = millis();  
   } else {
     if((cfg.restart_at_logged_errors>0) && (err_log_count>=cfg.restart_at_logged_errors)) {
@@ -673,7 +852,11 @@ class BLECharacteristicCallBack: public BLECharacteristicCallbacks {
              // packets is byte 2, then the contents start as of the 4th byte
              // there might still be packets coming 
              std::strcpy (cfg.url + (rxValueAsByteArray[1] - 1) * (maxBytesInOneBLEPacket - 3), rxValue.c_str() + 3);
- 
+             if (rxValueAsByteArray[1] == rxValueAsByteArray[2]) {
+              if (debugLogging) {Serial.print("received all packets, url = ");Serial.println(cfg.url);}
+              configureTargetServerAndUrl(cfg.url, cfg.token);
+              connectToWiFiIfNightScoutUrlExists();
+             }
           }
           break;
           
@@ -968,6 +1151,31 @@ class BLECharacteristicCallBack: public BLECharacteristicCallbacks {
                     updateGlycemia();
 
                 }
+             }
+             break;
+          
+
+             case 0x23: {
+
+                char * shouldConnectToWiFi = new char[6];// value is literally "true" or "false"
+                Serial.println(F("received opcode for writeConnectToWiFiTx"));
+                std::strcpy (shouldConnectToWiFi, rxValue.c_str() + 3);// starts at postion 4, because split in packets is used
+                
+                if (strcmp(shouldConnectToWiFi, "true") == 0) {
+
+                  connectToWiFi = true;
+                  connectToWiFiIfNightScoutUrlExists();
+                  
+                } else {
+
+                  connectToWiFi = false;
+                  
+                  WiFi.mode(WIFI_STA);
+                  WiFi.disconnect(true);
+  
+                }
+
+
              }
              break;
           
