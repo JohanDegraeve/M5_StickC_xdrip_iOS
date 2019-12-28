@@ -5,10 +5,12 @@ This is a modified version of https://github.com/JohanDegraeve/M5_NightscoutMon
 
 ### What is available in this project
 
-There's only one screen, with the bloodglucose value and an arrow. Always the same color. A bluetooth connection can be made with an iOS device that has xdrip installed : https://github.com/JohanDegraeve/xdripswift. The iOS device can send readings directly to the M5Stick
+There's only one screen, with the bloodglucose value and an arrow. A bluetooth connection can be made with an iOS device that has xdrip installed : https://github.com/JohanDegraeve/xdripswift. The iOS device can send readings directly to the M5Stick
 
 With xdrip one can
  * Scan for and connect to multiple M5Stacks and/or M5Sticks
+  * Configure WiFi Access points : names and passwords, maximum 3 access points (the first 3, the original project allows up to 10 configured in the ini file)
+ * configure NightScout url and token
  * configure the text color
  * configure the background color
  * rotate the screen
