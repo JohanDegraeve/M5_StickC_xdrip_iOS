@@ -31,7 +31,9 @@
     Peter Leimbach (Nightscout token)
 */
 
-#include <M5StickC.h>
+//#include <M5StickC.h>
+#include <M5StickCPlus.h>
+
 #include <Preferences.h>
 #include "time.h"
 // #include <util/eu_dst.h>
