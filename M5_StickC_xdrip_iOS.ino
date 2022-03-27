@@ -1198,6 +1198,11 @@ class BLEServerCallBack: public BLEServerCallbacks {
 
       // need to set authenticated to false, because the M5Stack will immediately start advertising again, so another client might connect
       bleAuthenticated = false;
+
+     if (pServer != NULL) {
+        pServer->getAdvertising()->start();
+     }
+      
     }
 };
 
