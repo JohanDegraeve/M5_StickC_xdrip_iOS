@@ -539,7 +539,10 @@ void updateGlycemia() {
         if (utcTimeInSeconds > timeStampLatestBgReadingInSecondsUTC + (5 * 60 + 10) || ns.sensSgvMgDl == 0) {
           Serial.println(F("utcTimeInSeconds > timeStampLatestBgReadingInSecondsUTC + (5 * 60 + 10) or ns.sensSgvMgDl == 0, not showing value"));
           // latest nightscout reading is more than 5 minutes old, don't show the value - value is "---"
-          
+
+            // send heartbeat message - this will wake up xDrip4iOS, will fetch reading (either from NS or Libreview) and send back to M5Stack
+          sendTextToBLEClient("", 0x21, 0);
+            
         } else {
                 if( cfg.show_mgdl == 0 ) {
                   
