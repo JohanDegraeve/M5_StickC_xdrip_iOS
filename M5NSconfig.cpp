@@ -160,26 +160,7 @@ void readConfiguration(char *iniFilename, tConfig *cfg) {
     cfg->brightness3 = 10;
   }
 
-  for(int i=0; i<=9; i++) {
-    char wlansection[10];
-    sprintf(wlansection, "wlan%1d", i);
-
-    if (ini.getValue(wlansection, "ssid", buffer, bufferLen)) {
-      Serial.printf("[wlan%1d] ssid = %s\n", i, buffer);
-      strlcpy(cfg->wlanssid[i], buffer,32);
-    } else {
-      Serial.printf("NO [wlan%1d] ssid\n", i);
-      cfg->wlanssid[i][0] = 0;
-    }
-  
-    if (ini.getValue(wlansection, "pass", buffer, bufferLen)) {
-      Serial.printf("[wlan%1d] password found in config\n", i);
-      strlcpy(cfg->wlanpass[i], buffer, 32);
-    } else {
-      Serial.printf("NO [wlan%1d] password found\n", i);
-      cfg->wlanpass[i][0] = 0;
-    }
-  }
+  // WiFi configuration removed - no longer needed
 
   if (ini.getValue("config", "blepassword", buffer, bufferLen)) {
     Serial.print("blepassword found in config\n");
