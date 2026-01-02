@@ -33,6 +33,7 @@
 
 //#include <M5StickC.h>
 #include <M5StickCPlus2.h>
+#include <Wire.h>
 
 #include <Preferences.h>
 #include "time.h"
@@ -78,7 +79,8 @@ int icon_ypos[1] = {0};
 unsigned long msCount;
 unsigned long msStart;
 static uint8_t lcdBrightness = 10;
-static char *iniFilename = "/M5NS.INI";
+static const char *iniFilename = "/M5NS.INI";
+
 
 // color to use for text, also for slope arrow
 static uint16_t textColor = TFT_WHITE;
@@ -87,7 +89,6 @@ static uint16_t backGroundColor = TFT_BLACK;
 
 // rotation to use
 static uint8_t rotation = 1;// 1 = horizontal, normal; 2 = 90 clockwise, 3 = upside down, 4 = 270 clockwise or 90 anti-clockwise
-
 
 //timestamp of latest nightscout reading, initially 0
 unsigned long timeStampLatestBgReadingInSecondsUTC = 0;
@@ -161,9 +162,10 @@ unsigned long milliSecondsSinceRetrievalTimeStampInSecondsRetrievedFromBLEClient
 byte rxValueAsByteArray[maxBytesInOneBLEPacket];
 
 
-////// NightScout properties
-
-char NSurl[128];
+// Forward declarations
+void sendTextToBLEClient(char * textToSend, uint8_t opCode, int maximumSizeOfTextToSend);
+int sizeOfStringInCharArray(char stringtext[], int arraysize);
+void setupBLE();
 
 /////// FUNCTIONS
 
@@ -224,26 +226,6 @@ unsigned long getUTCTimeInSeconds() {
   }
 }
 
-void setPageIconPos() {
-      // no icons needed anymore
-}
-
-void drawIcon(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t color) {
-  int16_t w = 16;
-  int16_t h = 16; 
-  int32_t i, j, byteWidth = (w + 7) / 8;
-  for (j = 0; j < h; j++) {
-    for (i = 0; i < w; i++) {
-      if (pgm_read_byte(bitmap + j * byteWidth + i / 8) & (128 >> (i & 7))) {
-        M5.Lcd.drawPixel(x + i, y + j, color);
-      } else {
-         M5.Lcd.drawPixel(x + i, y + j, backGroundColor);
-      }
-    }
-  }
-}
-
-
 // the setup routine runs once when M5Stack starts up
 void setup() {
 
@@ -251,106 +233,43 @@ void setup() {
     strcpy(previousSensSgvStr, "");
     
     // initialize the M5Stack object
-    M5.begin();
+    StickCP2.begin();
 
     // set rotation
-    M5.Lcd.setRotation(rotation);
+    StickCP2.Lcd.setRotation(rotation);
     
     // set text color foreground and backGroundColor
-    M5.Lcd.setTextColor(textColor, backGroundColor);
+    StickCP2.Lcd.setTextColor(textColor, backGroundColor);
     
     // prevent button A "ghost" random presses
     Wire.begin();
-    SD.begin();
     
     // Lcd display
-    //M5.Lcd.setBrightness(100);
-    M5.Lcd.fillScreen(backGroundColor);
-    M5.Lcd.setCursor(0, 0);
-    M5.Lcd.setTextSize(1);
+    //StickCP2.Lcd.setBrightness(100);
+    StickCP2.Lcd.fillScreen(backGroundColor);
+
+    StickCP2.Lcd.setCursor(0, 0);
+    StickCP2.Lcd.setTextSize(1);
     
     yield();
 
     Serial.print(F("Free Heap: ")); Serial.println(ESP.getFreeHeap());
 
-    uint8_t cardType = SD.cardType();
-
-    if(cardType == CARD_NONE){
-        Serial.println(F("No SD card attached"));
-        M5.Lcd.println(F("No SD card attached"));
-    } else {
-      
-          readConfiguration(iniFilename, &cfg);
-          lcdBrightness = cfg.brightness1;
-          
-          if (sizeOfStringInCharArray(cfg.blepassword, 64) >0) {
-            useConfiguredBlePassword = true;
-          }
-          
-          yield();
-      
-          preferences.begin("M5StackNS", false);
-          if(preferences.getBool("SoftReset", false)) {
-            // no startup sound after soft reset and remove the SoftReset key
-            preferences.remove("SoftReset");
-          }
-          
-          preferences.end();
-      
-          delay(1000);
-          M5.Lcd.fillScreen(backGroundColor);
-      
- 
-          yield();
-      
-      
-          setPageIconPos();
-          
-          // stat startup time
-          msStart = millis();
-          
-          // update glycemia now
-          msCount = msStart-16000L;
-
-          configureTargetServerAndUrl(cfg.url, cfg.token);
-
-    }
-
     if (useBLE) {
       Serial.println(F("Bluetooth is on, open the xdrip app on iOS device and scan for M5Stack"));
-      M5.Lcd.println(F("Bluetooth is on, open the xdrip app on iOS device and scan for M5Stack"));
+      StickCP2.Lcd.println(F("Bluetooth is on, open the xdrip app on iOS device and scan for M5Stack"));
       setupBLE();
     }
-}
-
-int readNightscout() {
-  // WiFi functionality removed - readings now come via BLE only
-  int err=0;
-  
-  // No nightscout reading via WiFi anymore
-  if (debugLogging) {
-    Serial.println(F("readNightscout called but WiFi is disabled - readings come via BLE"));
-  }
-    
-  }
-
-  M5.Lcd.fillRect(icon_xpos[0], icon_ypos[0], 16, 16, backGroundColor);
-
-  return err;
 }
 
 void updateGlycemia() {
   char tmpstr[255];// MAKE GLOBAL AND AVOID RECREATION each TIME ???
   
-  M5.Lcd.setTextDatum(TL_DATUM);
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.setCursor(0, 0);
+  StickCP2.Lcd.setTextDatum(TL_DATUM);
+  StickCP2.Lcd.setTextSize(1);
+  StickCP2.Lcd.setCursor(0, 0);
 
-  if (M5.Lcd.width() >= 320){
-    M5.Lcd.setFreeFont(FSSB24);
-  } else {
-    M5.Lcd.setFreeFont(FSSB18);
-  }
+  StickCP2.Lcd.setFreeFont(FSSB24);
   
       
       sprintf(tmpstr, "Glyk: %4.1f %s", ns.sensSgv, ns.sensDir);
@@ -390,12 +309,7 @@ void updateGlycemia() {
                 } else {
                   Serial.println("ns.sensSgv >= 10");
                   sprintf(sensSgvStr, "%4.1f", ns.sensSgv);
-                  if (M5.Lcd.width() >= 320){
-                    M5.Lcd.setFreeFont(FSSB18);
-                  } else {
-                    M5.Lcd.setFreeFont(FSSB12);
-                  }
-
+                  StickCP2.Lcd.setFreeFont(FSSB24);
                 }
               }
 
@@ -420,19 +334,26 @@ void updateGlycemia() {
       
       // if strings is new, then display the new string and copy to previousSensSgvStr
       if (!previousEqualToNew) {
-         M5.Lcd.fillRect(0, 0,  M5.Lcd.width(),  M5.Lcd.height(), backGroundColor);
-         if (M5.Lcd.width() <= 80) {
+         StickCP2.Lcd.fillRect(0, 0,  StickCP2.Lcd.width(),  StickCP2.Lcd.height(), backGroundColor);
+         if (StickCP2.Lcd.width() <= 80) {
             // seems to be an m5stickC 90 or 270 screen rotation
-           M5.Lcd.setTextSize(1);
-         } else if (M5.Lcd.width() <= 160) {
+           StickCP2.Lcd.setTextSize(1);
+           //StickCP2.Lcd.drawString("1", StickCP2.Lcd.width()/2, StickCP2.Lcd.height()/2, GFXFF);
+         } else if (StickCP2.Lcd.width() <= 160) {
             // seems to be an m5stickC horizontal
-           M5.Lcd.setTextSize(2);
+           StickCP2.Lcd.setTextSize(2);
+           //StickCP2.Lcd.drawString("2", StickCP2.Lcd.width()/2, StickCP2.Lcd.height()/2, GFXFF);
+         } else if (StickCP2.Lcd.width() < 240) {
+            // seems to be an m5stickC horizontal
+           StickCP2.Lcd.setTextSize(4);
+           //StickCP2.Lcd.drawString("4", StickCP2.Lcd.width()/2, StickCP2.Lcd.height()/2, GFXFF);
          } else {
-           M5.Lcd.setTextSize(4);
+           StickCP2.Lcd.setTextSize(10);
+           //StickCP2.Lcd.drawString("10", StickCP2.Lcd.width()/2, StickCP2.Lcd.height()/2, GFXFF);
          }
 
-         M5.Lcd.setTextDatum(MC_DATUM);
-         M5.Lcd.drawString(sensSgvStr, M5.Lcd.width()/2, M5.Lcd.height()/2, GFXFF);
+         StickCP2.Lcd.setTextDatum(MC_DATUM);
+         StickCP2.Lcd.drawString(sensSgvStr, StickCP2.Lcd.width()/2, StickCP2.Lcd.height()/2, GFXFF);
 
          /// draw arrow
          int ay=0;
@@ -445,10 +366,10 @@ void updateGlycemia() {
 
         if (strcmp(sensSgvStr, "---") != 0) {
           if(ns.arrowAngle!=180) {
-             if (M5.Lcd.width() <= 160) {
-                //drawArrow(M5.Lcd.width() - 40, 40, 10, ns.arrowAngle+85, 30, 30, textColor);//(int x, int y, int asize, int aangle, int pwidth, int plength, uint16_t color){
+             if (StickCP2.Lcd.width() <= 160) {
+                //drawArrow(StickCP2.Lcd.width() - 40, 40, 10, ns.arrowAngle+85, 30, 30, textColor);//(int x, int y, int asize, int aangle, int pwidth, int plength, uint16_t color){
              } else {
-                drawArrow( M5.Lcd.width() - 40, ay, 10, ns.arrowAngle+85, 28, 28, textColor);
+                drawArrow( StickCP2.Lcd.width() - 40, ay, 10, ns.arrowAngle+85, 28, 28, textColor);
              }
           }
         }
@@ -471,12 +392,10 @@ void loop(){
 
   unsigned long utcTimeInSeconds = getUTCTimeInSeconds();
 
-  // updateglycemia and call readNightScout every 120 seconds, or if latest reading is more than 2 minutes old, then check every 15 seconds, or if utcTimeInSeconds is still 0
+  // updateglycemia every 120 seconds, or if latest reading is more than 2 minutes old, then check every 15 seconds, or if utcTimeInSeconds is still 0
   // call to updateGlycemia here is only needed to make sure that if there's no recent reading, younger than 5 minutes, to make sure --- is shown
-  // if readNightScout results in a new reading, then this will also call updateGlyecemia
   if((millis()-msCount>120000L) || ((millis()-msCount>5000) && utcTimeInSeconds == 0L)  || ((millis()-msCount>15000L) && utcTimeInSeconds > 0L && (utcTimeInSeconds-timeStampLatestBgReadingInSecondsUTC>120L))) {
     updateGlycemia();
-    readNightscout();
     msCount = millis();  
   } else {
     if((cfg.restart_at_logged_errors>0) && (err_log_count>=cfg.restart_at_logged_errors)) {
@@ -488,25 +407,9 @@ void loop(){
 
   }
 
-  M5.update();
+  StickCP2.update();
 }
 
-//////// helper functions
-
-void configureTargetServerAndUrl(char *url, char *token) {
-
-    if(strncmp(url, "http", 4))
-      strcpy(NSurl,"https://");
-    else
-      strcpy(NSurl,"");
-    strcat(NSurl,url);
-    strcat(NSurl,"/api/v1/entries.json");
-    if ((token!=NULL) && (strlen(token)>0)){
-      strcat(NSurl,"?token=");
-      strcat(NSurl,token);
-    }
-  
-}
 
 void setNsArrowAngle() {
           previousArrowAngle = ns.arrowAngle;
@@ -553,16 +456,16 @@ void drawArrow(int x, int y, int asize, int aangle, int pwidth, int plength, uin
   float yy2 = y2*cos(angle)+x2*sin(angle)+dy;
   float xx3 = x3*cos(angle)-y3*sin(angle)+dx;
   float yy3 = y3*cos(angle)+x3*sin(angle)+dy;
-  M5.Lcd.fillTriangle(xx1,yy1,xx3,yy3,xx2,yy2, color);
-  M5.Lcd.drawLine(x, y, xx1, yy1, color);
-  M5.Lcd.drawLine(x+1, y, xx1+1, yy1, color);
-  M5.Lcd.drawLine(x, y+1, xx1, yy1+1, color);
-  M5.Lcd.drawLine(x-1, y, xx1-1, yy1, color);
-  M5.Lcd.drawLine(x, y-1, xx1, yy1-1, color);
-  M5.Lcd.drawLine(x+2, y, xx1+2, yy1, color);
-  M5.Lcd.drawLine(x, y+2, xx1, yy1+2, color);
-  M5.Lcd.drawLine(x-2, y, xx1-2, yy1, color);
-  M5.Lcd.drawLine(x, y-2, xx1, yy1-2, color);
+  StickCP2.Lcd.fillTriangle(xx1,yy1,xx3,yy3,xx2,yy2, color);
+  StickCP2.Lcd.drawLine(x, y, xx1, yy1, color);
+  StickCP2.Lcd.drawLine(x+1, y, xx1+1, yy1, color);
+  StickCP2.Lcd.drawLine(x, y+1, xx1, yy1+1, color);
+  StickCP2.Lcd.drawLine(x-1, y, xx1-1, yy1, color);
+  StickCP2.Lcd.drawLine(x, y-1, xx1, yy1-1, color);
+  StickCP2.Lcd.drawLine(x+2, y, xx1+2, yy1, color);
+  StickCP2.Lcd.drawLine(x, y+2, xx1, yy1+2, color);
+  StickCP2.Lcd.drawLine(x-2, y, xx1-2, yy1, color);
+  StickCP2.Lcd.drawLine(x, y-2, xx1, yy1-2, color);
 }
 
 void byteArrayToHexString(byte array[], unsigned int len, char buffer[])
@@ -659,7 +562,7 @@ class BLECharacteristicCallBack: public BLECharacteristicCallbacks {
   
   void onWrite(BLECharacteristic *pCharacteristic) {
     
-    std::string rxValue = pCharacteristic->getValue();
+    String rxValue = pCharacteristic->getValue();
 
     if (rxValue.length() > 0) {
         
@@ -680,30 +583,6 @@ class BLECharacteristicCallBack: public BLECharacteristicCallbacks {
         switch (opCode) {
 
           /// codes for writing from client to server         
-          
-          case 0x01:{
-             Serial.println(F("received opcode for writeNightScoutUrlTx"));
-             // if it's a long url, we will receive multiple packets, the packet number is the second byte, starting at 1, the total number of 
-             // packets is byte 2, then the contents start as of the 4th byte
-             // there might still be packets coming 
-             std::strcpy (cfg.url + (rxValueAsByteArray[1] - 1) * (maxBytesInOneBLEPacket - 3), rxValue.c_str() + 3);
-             if (rxValueAsByteArray[1] == rxValueAsByteArray[2]) {
-              if (debugLogging) {Serial.print("received all packets, url = ");Serial.println(cfg.url);}
-              configureTargetServerAndUrl(cfg.url, cfg.token);
-             }
-          }
-          break;
-          
-          case 0x02:{
-             Serial.println(F("received opcode for writeNightScoutAPIKeyTx"));
-             std::strcpy (cfg.token + (rxValueAsByteArray[1] - 1) * (maxBytesInOneBLEPacket - 3), rxValue.c_str() + 3);
-             if (rxValueAsByteArray[1] == rxValueAsByteArray[2]) {
-              if (debugLogging) {Serial.print("received all packets, token = ");Serial.println(cfg.token);}
-              configureTargetServerAndUrl(cfg.url, cfg.token);
-             }
-
-          }
-          break;
           
           case 0x03:{
             char * unitismgdl = new char[6];// value is literally "true" or "false"
@@ -731,18 +610,6 @@ class BLECharacteristicCallBack: public BLECharacteristicCallbacks {
              Serial.println(F("received opcode for writebrightness3Tx"));
           break;
           
-          case 0x07: {
-             // WiFi SSID opcode - no longer used
-             Serial.println(F("received opcode for writeWlanSSIDTx - WiFi disabled, ignoring"));
-          }
-          break;
-          
-          case 0x08:{
-             // WiFi password opcode - no longer used
-             Serial.println(F("received opcode for writeWlanPassTx - WiFi disabled, ignoring"));
-          }
-          break;
-
           case 0x09: {
              Serial.println(F("received opcode for readBlePassWordTx"));
 
@@ -904,7 +771,7 @@ class BLECharacteristicCallBack: public BLECharacteristicCallbacks {
                     strcpy(previousSensSgvStr, "");
 
                     // set new textcolor
-                    M5.Lcd.setTextColor(textColor, backGroundColor);
+                    StickCP2.Lcd.setTextColor(textColor, backGroundColor);
                     updateGlycemia();
                 }
              }
@@ -921,7 +788,7 @@ class BLECharacteristicCallBack: public BLECharacteristicCallbacks {
                     strcpy(previousSensSgvStr, "");
 
                     // set new textcolor
-                    M5.Lcd.setTextColor(textColor, backGroundColor);
+                    StickCP2.Lcd.setTextColor(textColor, backGroundColor);
                     
                     updateGlycemia();
 
@@ -942,7 +809,7 @@ class BLECharacteristicCallBack: public BLECharacteristicCallbacks {
                     strcpy(previousSensSgvStr, "");
 
                     // set new rotation
-                    M5.Lcd.setRotation(rotation);
+                    StickCP2.Lcd.setRotation(rotation);
 
                     updateGlycemia();
 
